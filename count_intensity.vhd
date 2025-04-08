@@ -1,73 +1,106 @@
-library ieee;
-use ieee.std_logic_1164.all;
-use ieee.numeric_std.all;
+LIBRARY ieee;
+USE ieee.std_logic_1164.all;
+USE ieee.numeric_std.all; -- Adicionado para operações numéricas
 
-entity count_intensity is 
-    port(
-        clk:    in std_logic;
-        reset:  in std_logic;
-        digit0: out std_logic_vector(3 downto 0);  -- BCD unidades
-        digit1: out std_logic_vector(3 downto 0);  -- BCD dezenas
-		  seg0: out std_logic_vector(6 downto 0);
-		  seg1: out std_logic_vector(6 downto 0)
-	 );
-end count_intensity;
+ENTITY count_intensity IS
+    PORT (
+        clk     : IN  STD_LOGIC;
+        blink   : OUT STD_LOGIC;
+		  reset: in std_logic;
+		  button_up:  in std_logic;
+        button_down: in std_logic;
+		  digit0:     out std_logic_vector(3 downto 0);  -- BCD unidades
+        digit1:     out std_logic_vector(3 downto 0);	 -- BCD dezenas
+		  seg0		 : OUT std_logic_vector(6 downto 0);
+		  seg1		 : OUT std_logic_vector(6 downto 0)
+    );
+END count_intensity;
 
-architecture behavioral of count_intensity is
-    signal count0, count1: integer range 0 to 9 := 0;
-begin
-    process(clk, reset)
-    begin
-        if reset = '1' then
+ARCHITECTURE counter OF count_intensity IS
+    -- Constante para divisão do clock (ajuste conforme o clock da sua placa)
+    constant DIVISOR : INTEGER := 25000000; -- Para 50MHz, 25M ciclos = 0.5s
+	 signal count0, count1: INTEGER RANGE 0 TO 10 := 0;
+	 signal button_up_prev, button_down_prev: std_logic := '0';
+BEGIN
+    PROCESS(clk)
+        VARIABLE blink_counter: INTEGER RANGE 0 TO DIVISOR := 0;
+        VARIABLE blink_state: STD_LOGIC := '0';
+		  variable bcd0: std_logic_vector(3 downto 0);
+		  variable bcd1: std_logic_vector(3 downto 0);
+    BEGIN
+		 if reset = '0' then
             count0 <= 0;
             count1 <= 0;
-        elsif rising_edge(clk) then
-            if count0 = 9 then
-                count0 <= 0;
-                if count1 = 9 then
-                    count1 <= 0;
-                else
-                    count1 <= count1 + 1;
-                end if;
-            else
-                count0 <= count0 + 1;
-            end if;
-        end if;
-    end process;
-
-	 process(count0, count1)
-	 begin
-		case count0 is
-				when 0 => seg0 <= "0000001"; -- 0
-            when 1 => seg0 <= "1001111"; -- 1
-            when 2 => seg0 <= "0010010"; -- 2
-            when 3 => seg0 <= "0000110"; -- 3
-            when 4 => seg0 <= "1001100"; -- 4
-            when 5 => seg0 <= "0100100"; -- 5
-            when 6 => seg0 <= "0100000"; -- 6
-            when 7 => seg0 <= "0001111"; -- 7
-            when 8 => seg0 <= "0000000"; -- 8
-            when 9 => seg0 <= "0000100"; -- 9
+            button_up_prev <= '0';
+            button_down_prev <= '0';
+        elsif rising_edge(clk) THEN
+            -- Controle do Blink (1Hz)
+            blink_counter := blink_counter + 1;
+            IF blink_counter = DIVISOR THEN
+                blink_counter := 0;
+                blink_state := NOT blink_state; -- Inverte o estado
+					-- Contador principal (0-9)
+					button_up_prev <= button_up;
+					button_down_prev <= button_down;
+					
+					-- Lógica de incremento (botão up)
+					if button_up = '1' then
+						 if count0 = 9 then
+							  count0 <= 0;
+							  if count1 = 9 then
+									count1 <= 0;
+							  else
+									count1 <= count1 + 1;
+							  end if;
+						 else
+							  count0 <= count0 + 1;
+						 end if;
+					
+					-- Lógica de decremento (botão down)
+					elsif button_down = '1' then
+						 if count0 = 0 then
+							  count0 <= 9;
+							  if count1 = 0 then
+									count1 <= 9;
+							  else
+									count1 <= count1 - 1;
+							  end if;
+						 else
+							  count0 <= count0 - 1;
+						 end if;
+					end if;
+				END IF;
+				blink <= blink_state;
+				 bcd0 := std_logic_vector(to_unsigned(count0, 4));
+				 bcd1 := std_logic_vector(to_unsigned(count1, 4));	
+        END IF;
+		  case bcd0 is
+				when "0000" => seg0 <= "1000000"; -- 0
+            when "0001" => seg0 <= "1111001"; -- 1
+            when "0010" => seg0 <= "0100100"; -- 2
+            when "0011" => seg0 <= "0110000"; -- 3
+            when "0100" => seg0 <= "0011001"; -- 4
+            when "0101" => seg0 <= "0010010"; -- 5
+            when "0110" => seg0 <= "0000010"; -- 6
+            when "0111" => seg0 <= "1111000"; -- 7
+            when "1000" => seg0 <= "0000000"; -- 8
+            when "1001" => seg0 <= "0010000"; -- 9
             when others => seg0 <= "1111111"; -- Apagado
 		end case;
-		case count0 is
-				when 0 => seg1 <= "0000001"; -- 0
-            when 1 => seg1 <= "1001111"; -- 1
-            when 2 => seg1 <= "0010010"; -- 2
-            when 3 => seg1 <= "0000110"; -- 3
-            when 4 => seg1 <= "1001100"; -- 4
-            when 5 => seg1 <= "0100100"; -- 5
-            when 6 => seg1 <= "0100000"; -- 6
-            when 7 => seg1 <= "0001111"; -- 7
-            when 8 => seg1 <= "0000000"; -- 8
-            when 9 => seg1 <= "0000100"; -- 9
+		case bcd1 is
+				when "0000" => seg1 <= "1000000"; -- 0
+            when "0001" => seg1 <= "1111001"; -- 1
+            when "0010" => seg1 <= "0100100"; -- 2
+            when "0011" => seg1 <= "0110000"; -- 3
+            when "0100" => seg1 <= "0011001"; -- 4
+            when "0101" => seg1 <= "0010010"; -- 5
+            when "0110" => seg1 <= "0000010"; -- 6
+            when "0111" => seg1 <= "1111000"; -- 7
+            when "1000" => seg1 <= "0000000"; -- 8
+            when "1001" => seg1 <= "0010000"; -- 9
             when others => seg1 <= "1111111"; -- Apagado
 		end case;
-	 end process;
-    -- Conversão para BCD (4 bits)
-    digit0 <= std_logic_vector(to_unsigned(count0, 4));
-    digit1 <= std_logic_vector(to_unsigned(count1, 4));
-	
-	
-	 
-end behavioral;
+		digit0 <= bcd0;
+		digit1 <= bcd1;
+    END PROCESS;
+END counter;
